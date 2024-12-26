@@ -24,9 +24,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"os"
 
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
+	"github.com/sigstore/sigstore/pkg/signature"
 	"github.com/sigstore/sigstore/pkg/signature/kms"
 	"github.com/sigstore/sigstore/pkg/signature/kms/cliplugin/common"
 )
@@ -121,4 +123,21 @@ func (c PluginClient) CreateKey(ctx context.Context, algorithm string) (crypto.P
 		return nil, err
 	}
 	return publicKey, nil
+}
+
+func (c PluginClient) SignMessage(message io.Reader, opts ...signature.SignOption) ([]byte, error) {
+	ctx := context.TODO()
+	args := &common.MethodArgs{
+		MethodName: common.SignMessageMethodName,
+		SignMessage: &common.SignMessageArgs{
+			SignOptions: getSignOptions(&ctx, opts),
+		},
+	}
+	resp, err := c.invokePlugin(ctx, message, args)
+	slog.Info("ctx", "ctx", ctx)
+	if err != nil {
+		return nil, err
+	}
+	signature := resp.SignMessage.Signature
+	return signature, nil
 }

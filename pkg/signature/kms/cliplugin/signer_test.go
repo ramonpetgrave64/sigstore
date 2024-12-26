@@ -31,17 +31,26 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
+	"github.com/sigstore/sigstore/pkg/signature"
 	"github.com/sigstore/sigstore/pkg/signature/kms"
 	"github.com/sigstore/sigstore/pkg/signature/kms/cliplugin/common"
 	"github.com/sigstore/sigstore/pkg/signature/kms/cliplugin/handler"
+	"github.com/sigstore/sigstore/pkg/signature/options"
 )
 
 var (
 	testExecutable         = "sigstore-kms-test"
 	testPluginErrorMessage = "404: not found"
-	testContextDeadline    = time.Now().Add(time.Hour * 47)
+	// testContextDeadline    = time.Now().Add(time.Minute * 47)
+	testContextDeadline    = time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)
 	testDefaultAlgorithm   = "alg1"
 	testPublicKey          crypto.PublicKey
+	testMessageBytes       = []byte(`my-message`)
+	testSignature          = []byte(`my-signature`)
+	testKeyVersion         = "my-key-version"
+	testRemoteVerification = true
+	testDigest             = []byte("my-digest")
+	testHashFunc           = crypto.SHA512
 )
 
 type testCommand struct {
@@ -221,8 +230,7 @@ func TestInvokePlugin(t *testing.T) {
 }
 
 // TestSignerVerifierImpl is a mock implementation that asserts that the
-// expected values are both sent and received through the encoding and decoding processes
-// for each method. Each method should invoke `s.t.Helper()` for easier debug outputs.
+// expected values are both sent and received through the encoding and decoding processes.
 type TestSignerVerifierImpl struct {
 	// TODO: remove this embedding after all methods are implemented.
 	kms.SignerVerifier
@@ -231,13 +239,11 @@ type TestSignerVerifierImpl struct {
 
 // DefaultAlgorithm accepts no arguments, but returns an expected value.
 func (s TestSignerVerifierImpl) DefaultAlgorithm() string {
-	s.t.Helper()
 	return testDefaultAlgorithm
 }
 
 // CreateKey checks the expected context deadline and algorithm, and returns the expected public key.
 func (s TestSignerVerifierImpl) CreateKey(ctx context.Context, algorithm string) (crypto.PublicKey, error) {
-	s.t.Helper()
 	if diff := cmp.Diff(testDefaultAlgorithm, algorithm); diff != "" {
 		s.t.Errorf("unexpected algorithm (-want +got):\n%s", diff)
 	}
@@ -249,6 +255,34 @@ func (s TestSignerVerifierImpl) CreateKey(ctx context.Context, algorithm string)
 		s.t.Errorf("unexpected context deadline (-want +got):\n%s", diff)
 	}
 	return testPublicKey, nil
+}
+
+func (s TestSignerVerifierImpl) SignMessage(message io.Reader, opts ...signature.SignOption) ([]byte, error) {
+	messageBytes, err := io.ReadAll(message)
+	if err != nil {
+		return nil, err
+	}
+	if diff := cmp.Diff(testMessageBytes, messageBytes); diff != "" {
+		s.t.Errorf("unexpected message (-want +got):\n%s", diff)
+	}
+	ctx := context.TODO()
+	signOptions := getSignOptions(&ctx, opts)
+	if diff := cmp.Diff(testContextDeadline, *signOptions.CtxDeadline); diff != "" {
+		s.t.Errorf("unexpected context deadline (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(testKeyVersion, *signOptions.KeyVersion); diff != "" {
+		s.t.Errorf("unexpected key version (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(testRemoteVerification, *signOptions.RemoteVerification); diff != "" {
+		s.t.Errorf("unexpected remote verification (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(testDigest, *signOptions.Digest); diff != "" {
+		s.t.Errorf("unexpected digest (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(testHashFunc, *signOptions.HashFunc); diff != "" {
+		s.t.Errorf("unexpected hash (-want +got):\n%s", diff)
+	}
+	return testSignature, nil
 }
 
 // TestPluginClient tests each of PluginClient's methods for correct encoding and decoding between a simulated plugin program,
@@ -283,13 +317,14 @@ func TestPluginClient(t *testing.T) {
 		&common.InitOptions{},
 		makeCommandFunc,
 	)
+	var testErr error = nil
 
 	t.Run("DefaultAlgorithm", func(t *testing.T) {
 		t.Parallel()
 
 		defaultAlgorithm := testPluginClient.DefaultAlgorithm()
 		if diff := cmp.Diff(testDefaultAlgorithm, defaultAlgorithm); diff != "" {
-			t.Errorf("Default algorithm mismatch (-want +got):\n%s", diff)
+			t.Errorf("default algorithm mismatch (-want +got):\n%s", diff)
 		}
 	})
 
@@ -300,10 +335,31 @@ func TestPluginClient(t *testing.T) {
 		publicKey, err := testPluginClient.CreateKey(testContext, testDefaultAlgorithm)
 
 		if diff := cmp.Diff(testPublicKey, publicKey); diff != "" {
-			t.Errorf("Public key mismatch (-want +got):\n%s", diff)
+			t.Errorf("public key mismatch (-want +got):\n%s", diff)
 		}
-		if diff := cmp.Diff(nil, err); diff != "" {
-			t.Errorf("Error mismatch (-want +got):\n%s", diff)
+		if diff := cmp.Diff(testErr, err); diff != "" {
+			t.Errorf("eerror mismatch (-want +got):\n%s", diff)
+		}
+	})
+
+	t.Run("SignMessage", func(t *testing.T) {
+		t.Parallel()
+
+		testContext, _ := context.WithDeadline(context.TODO(), testContextDeadline)
+		testOpts := []signature.SignOption{
+			options.WithContext(testContext),
+			options.WithKeyVersion(testKeyVersion),
+			options.WithRemoteVerification(testRemoteVerification),
+			options.WithDigest(testDigest),
+			options.WithCryptoSignerOpts(testHashFunc),
+		}
+		signature, err := testPluginClient.SignMessage(bytes.NewReader(testMessageBytes), testOpts...)
+
+		if diff := cmp.Diff(testSignature, signature); diff != "" {
+			t.Errorf("signature mismatch (-want +got):\n%s", diff)
+		}
+		if diff := cmp.Diff(testErr, err); diff != "" {
+			t.Errorf("error mismatch (-want +got):\n%s", diff)
 		}
 	})
 }

@@ -29,6 +29,7 @@ const (
 	ProtocolVersion            = "1"
 	DefaultAlgorithmMethodName = "defaultAlgorithm"
 	CreateKeyMethodName        = "createKey"
+	SignMessageMethodName      = "signMessage"
 	// TODO: Additonal methods to be implemented
 )
 
@@ -53,6 +54,7 @@ type MethodArgs struct {
 	MethodName       string                `json:"methodName"`
 	DefaultAlgorithm *DefaultAlgorithmArgs `json:"defaultAlgorithm,omitempty"`
 	CreateKey        *CreateKeyArgs        `json:"createKey,omitempty"`
+	SignMessage      *SignMessageArgs      `json:"signMessage,omitempty"`
 	// TODO: Additonal methods to be implemented
 }
 
@@ -61,6 +63,7 @@ type PluginResp struct {
 	ErrorMessage     string                `json:"errorMessage,omitempty"`
 	DefaultAlgorithm *DefaultAlgorithmResp `json:"defaultAlgorithm,omitempty"`
 	CreateKey        *CreateKeyResp        `json:"createKey,omitempty"`
+	SignMessage      *SignMessageResp      `json:"signMessage,omitempty"`
 	// TODO: Additonal methods to be implemented
 }
 
@@ -78,4 +81,12 @@ type CreateKeyArgs struct {
 
 type CreateKeyResp struct {
 	PublicKeyPEM []byte
+}
+
+type SignMessageArgs struct {
+	SignOptions *SignOptions `json:"signOptions"`
+}
+
+type SignMessageResp struct {
+	Signature []byte `json:"signature"`
 }
