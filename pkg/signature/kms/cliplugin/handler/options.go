@@ -54,3 +54,15 @@ func getMessageOptions(commonOpts *common.MessageOptions) []signature.MessageOpt
 	}
 	return opts
 }
+
+// getSignOptions builds the []]signature.SignOption from common.SignOptions.
+func getSignOptions(commonOpts *common.SignOptions) []signature.SignOption {
+	opts := []signature.SignOption{}
+	for _, opt := range getRPCOptions(commonOpts.RPCOptions) {
+		opts = append(opts, opt.(signature.SignOption))
+	}
+	for _, opt := range getMessageOptions(commonOpts.MessageOptions) {
+		opts = append(opts, opt.(signature.SignOption))
+	}
+	return opts
+}

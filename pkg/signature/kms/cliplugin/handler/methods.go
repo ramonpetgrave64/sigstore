@@ -23,7 +23,6 @@ import (
 	"io"
 
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
-	"github.com/sigstore/sigstore/pkg/signature"
 	"github.com/sigstore/sigstore/pkg/signature/kms"
 	"github.com/sigstore/sigstore/pkg/signature/kms/cliplugin/common"
 )
@@ -63,13 +62,7 @@ func CreateKey(stdin io.Reader, args *common.CreateKeyArgs, impl kms.SignerVerif
 
 // SignMessage translates the common method args to the real impl.SignMessage, and packages responses.
 func SignMessage(stdin io.Reader, args *common.SignMessageArgs, impl kms.SignerVerifier) (*common.SignMessageResp, error) {
-	opts := []signature.SignOption{}
-	for _, opt := range getRPCOptions(args.SignOptions.RPCOptions) {
-		opts = append(opts, opt.(signature.SignOption))
-	}
-	for _, opt := range getMessageOptions(args.SignOptions.MessageOptions) {
-		opts = append(opts, opt.(signature.SignOption))
-	}
+	opts := getSignOptions(args.SignOptions)
 	signature, err := impl.SignMessage(stdin, opts...)
 	if err != nil {
 		return nil, err
