@@ -41,8 +41,8 @@ import (
 var (
 	testExecutable         = "sigstore-kms-test"
 	testPluginErrorMessage = "404: not found"
-	// testContextDeadline    = time.Now().Add(time.Minute * 47)
-	testContextDeadline    = time.Date(2025, 1, 1, 10, 0, 0, 0, time.UTC)
+	testKeyResourceID      = "testkms://testkey"
+	testContextDeadline    = time.Date(2025, 4, 1, 2, 47, 0, 0, time.UTC)
 	testDefaultAlgorithm   = "alg1"
 	testPublicKey          crypto.PublicKey
 	testMessageBytes       = []byte(`my-message`)
@@ -96,12 +96,14 @@ func TestInvokePlugin(t *testing.T) {
 		MethodName:       common.DefaultAlgorithmMethodName,
 		DefaultAlgorithm: &common.DefaultAlgorithmArgs{},
 	}
-	testSerializedPluginArgs, err := json.Marshal(common.PluginArgs{
-		InitOptions: &common.InitOptions{},
+	testInitOptions := &common.InitOptions{
+		ProtocolVersion: common.ProtocolVersion,
+		KeyResourceID:   testKeyResourceID,
+		HashFunc:        testHashFunc,
+	}
+	testPluginArgs := &common.PluginArgs{
+		InitOptions: testInitOptions,
 		MethodArgs:  testMethodArgs,
-	})
-	if err != nil {
-		t.Fatal(err)
 	}
 	goodResp := &common.PluginResp{
 		DefaultAlgorithm: &common.DefaultAlgorithmResp{
@@ -185,20 +187,22 @@ func TestInvokePlugin(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// mock the behavior of Command.
 			makeCommandFunc := func(ctx context.Context, stdin io.Reader, stderr io.Writer, name string, args ...string) command {
-				t.Helper()
-				if name != testExecutable {
-					t.Fatalf("unexpected executable name: %s", name)
+				if diff := cmp.Diff(testExecutable, name); diff != "" {
+					t.Errorf("unexpected executable name (-want +got):\n%s", diff)
 				}
 				if stdinBytes, err := io.ReadAll(stdin); err != nil {
 					t.Fatalf("expected stdin: %v", err)
 				} else if diff := cmp.Diff(testStdinBytes, stdinBytes); diff != "" {
 					t.Errorf("unexpected stdin bytes (-want +got):\n%s", diff)
 				}
-				if args[0] != common.ProtocolVersion {
-					t.Fatalf("unexpected protocol version: %s", args[0])
+				if diff := cmp.Diff(common.ProtocolVersion, args[0]); diff != "" {
+					t.Errorf("unexpected protocol version (-want +got):\n%s", diff)
 				}
-				if args[1] != string(testSerializedPluginArgs) {
-					t.Fatalf("unexpected args: %s", args[1])
+				osArgs := append([]string{name}, args...)
+				if pluginArgs, err := handler.GetPluginArgs(osArgs); err != nil {
+					t.Error(err)
+				} else if diff := cmp.Diff(testPluginArgs, pluginArgs); diff != "" {
+					t.Errorf("unexpected plugin args (-want +got):\n%s", diff)
 				}
 				return testCommand{
 					output: tc.cmdOutputBytes,
@@ -206,11 +210,7 @@ func TestInvokePlugin(t *testing.T) {
 				}
 			}
 			// client with our mocked Command
-			testPluginClient := newPluginClient(
-				testExecutable,
-				&common.InitOptions{},
-				makeCommandFunc,
-			)
+			testPluginClient := newPluginClient(testExecutable, testInitOptions, makeCommandFunc)
 			// invokePlugin
 			testContext := context.TODO()
 			testStdin := bytes.NewBuffer(testStdinBytes)
@@ -266,21 +266,35 @@ func (s TestSignerVerifierImpl) SignMessage(message io.Reader, opts ...signature
 		s.t.Errorf("unexpected message (-want +got):\n%s", diff)
 	}
 	ctx := context.TODO()
-	signOptions := getSignOptions(&ctx, opts)
-	if diff := cmp.Diff(testContextDeadline, *signOptions.CtxDeadline); diff != "" {
+	var keyVersion string
+	var remoteVerification bool
+	var digest []byte
+	var signerOpts crypto.SignerOpts
+	for _, opt := range opts {
+		opt.ApplyContext(&ctx)
+		opt.ApplyKeyVersion(&keyVersion)
+		opt.ApplyRemoteVerification(&remoteVerification)
+		opt.ApplyDigest(&digest)
+		opt.ApplyCryptoSignerOpts(&signerOpts)
+	}
+	ctxDeadline, ok := ctx.Deadline()
+	if !ok {
+		s.t.Errorf("expected a deadline")
+	}
+	if diff := cmp.Diff(testContextDeadline, ctxDeadline); diff != "" {
 		s.t.Errorf("unexpected context deadline (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff(testKeyVersion, *signOptions.KeyVersion); diff != "" {
+	if diff := cmp.Diff(testKeyVersion, keyVersion); diff != "" {
 		s.t.Errorf("unexpected key version (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff(testRemoteVerification, *signOptions.RemoteVerification); diff != "" {
+	if diff := cmp.Diff(testRemoteVerification, remoteVerification); diff != "" {
 		s.t.Errorf("unexpected remote verification (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff(testDigest, *signOptions.Digest); diff != "" {
+	if diff := cmp.Diff(testDigest, digest); diff != "" {
 		s.t.Errorf("unexpected digest (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff(testHashFunc, *signOptions.HashFunc); diff != "" {
-		s.t.Errorf("unexpected hash (-want +got):\n%s", diff)
+	if diff := cmp.Diff(testHashFunc, signerOpts.HashFunc()); diff != "" {
+		s.t.Errorf("unexpected hash func (-want +got):\n%s", diff)
 	}
 	return testSignature, nil
 }
@@ -293,7 +307,6 @@ func TestPluginClient(t *testing.T) {
 	// Mock the behavior of Command to simulates a real plugin program by
 	// calling the helper handler functions `GetPluginArgs()` and `Dispatch()`, passing along the stdin stdout, and args.
 	makeCommandFunc := func(ctx context.Context, stdin io.Reader, stderr io.Writer, name string, args ...string) command {
-		t.Helper()
 		// Use the helpfer functions in the handler package.
 		osArgs := append([]string{name}, args...)
 		pluginArgs, err := handler.GetPluginArgs(osArgs)
