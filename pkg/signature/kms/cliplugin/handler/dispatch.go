@@ -14,7 +14,7 @@
 // limitations under the License.
 
 // Package handler implements helper functions for plugins written in go. It will extract
-// values from PluginArgs and pass them the a real SignerVerifier implementation, and then package
+// values from PluginArgs and pass them the real SignerVerifier implementation, and then package
 // responses into PluginResp.
 package handler
 
@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	ErrorPluginArgsParse   = errors.New("error parsing plign args")
+	ErrorPluginArgsParse   = errors.New("error parsing plugin args")
 	ErrorUnsupportedMethod = errors.New("unsupported methodArgs")
 )
 

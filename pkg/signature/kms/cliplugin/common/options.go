@@ -29,7 +29,7 @@ type SignOptions struct {
 
 // RPCOptions contains the values for signature.RPCOption.
 // We do not use RPCOptions.RPCAuth to avoid sending secrets over CLI to the plugin program.
-// The pluign program should instead read secrets with env variables.
+// The plugin program should instead read secrets with env variables.
 type RPCOptions struct {
 	CtxDeadline        *time.Time `json:"ctxDeadline,omitempty"`
 	KeyVersion         *string    `json:"keyVersion,omitempty"`

@@ -50,10 +50,10 @@ var (
 	testKeyVersion         = "my-key-version"
 	testRemoteVerification = true
 	testDigest             = []byte("my-digest")
-	testHashFunc           = crypto.SHA512
+	testHashFunction       = crypto.SHA512
 )
 
-type testCommand struct {
+type testCmd struct {
 	output []byte
 	err    error
 }
@@ -70,7 +70,7 @@ func (e testExitError) Error() string {
 	return "test exit error"
 }
 
-func (c testCommand) Output() ([]byte, error) {
+func (c testCmd) Output() ([]byte, error) {
 	return c.output, c.err
 }
 
@@ -89,7 +89,7 @@ HrgLLNu5Gj06Y2S8vvR3MBWbChpOIKGh1YrDoa4lt/XfjaNcHq7vcuYXwg==
 	os.Exit(exitCode)
 }
 
-// TestInvokePlugin ensures invokePlugin returns an error in the correct situations by mocking the Command function.
+// TestInvokePlugin ensures invokePlugin returns an error in the correct situations by mocking the Cmd function.
 func TestInvokePlugin(t *testing.T) {
 	testStdinBytes := []byte("my-stdin")
 	testMethodArgs := &common.MethodArgs{
@@ -99,7 +99,7 @@ func TestInvokePlugin(t *testing.T) {
 	testInitOptions := &common.InitOptions{
 		ProtocolVersion: common.ProtocolVersion,
 		KeyResourceID:   testKeyResourceID,
-		HashFunc:        testHashFunc,
+		HashFunc:        testHashFunction,
 	}
 	testPluginArgs := &common.PluginArgs{
 		InitOptions: testInitOptions,
@@ -126,7 +126,7 @@ func TestInvokePlugin(t *testing.T) {
 	tests := []struct {
 		name                  string
 		cmdOutputBytes        []byte
-		commandOutputErr      error
+		cmdOutputErr          error
 		resp                  *common.PluginResp
 		err                   error
 		errorMessageSubstring string
@@ -143,28 +143,28 @@ func TestInvokePlugin(t *testing.T) {
 			resp:           goodResp,
 		},
 		{
-			name:             "success: continue if command exits non-zero",
-			cmdOutputBytes:   goodOutput,
-			commandOutputErr: &testExitError{exitCode: 1},
-			resp:             goodResp,
+			name:           "success: continue if command exits non-zero",
+			cmdOutputBytes: goodOutput,
+			cmdOutputErr:   &testExitError{exitCode: 1},
+			resp:           goodResp,
 		},
 		{
-			name:             "failure: command eror, even if command exits 0",
-			cmdOutputBytes:   goodOutput,
-			commandOutputErr: &testExitError{exitCode: 0},
-			err:              ErrorExecutingPlugin,
+			name:           "failure: command eror, even if command exits 0",
+			cmdOutputBytes: goodOutput,
+			cmdOutputErr:   &testExitError{exitCode: 0},
+			err:            ErrorExecutingPlugin,
 		},
 		{
-			name:             "failure: ExitError.ExitStatus() is -1",
-			cmdOutputBytes:   goodOutput,
-			commandOutputErr: &testExitError{exitCode: -1},
-			err:              ErrorExecutingPlugin,
+			name:           "failure: ExitError.ExitStatus() is -1",
+			cmdOutputBytes: goodOutput,
+			cmdOutputErr:   &testExitError{exitCode: -1},
+			err:            ErrorExecutingPlugin,
 		},
 		{
-			name:             "failure: any other exec error",
-			cmdOutputBytes:   goodOutput,
-			commandOutputErr: errors.New("exec-error"),
-			err:              ErrorExecutingPlugin,
+			name:           "failure: any other exec error",
+			cmdOutputBytes: goodOutput,
+			cmdOutputErr:   errors.New("exec-error"),
+			err:            ErrorExecutingPlugin,
 		},
 		{
 			name:                  "error: plugin program error",
@@ -185,32 +185,32 @@ func TestInvokePlugin(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// mock the behavior of Command.
-			makeCommandFunc := func(ctx context.Context, stdin io.Reader, stderr io.Writer, name string, args ...string) command {
+			// mock the behavior of Cmd, simulating a plugin program.
+			makeCmdFunc := func(ctx context.Context, stdin io.Reader, stderr io.Writer, name string, args ...string) cmd {
 				if diff := cmp.Diff(testExecutable, name); diff != "" {
 					t.Errorf("unexpected executable name (-want +got):\n%s", diff)
 				}
-				if stdinBytes, err := io.ReadAll(stdin); err != nil {
-					t.Fatalf("expected stdin: %v", err)
-				} else if diff := cmp.Diff(testStdinBytes, stdinBytes); diff != "" {
-					t.Errorf("unexpected stdin bytes (-want +got):\n%s", diff)
-				}
 				if diff := cmp.Diff(common.ProtocolVersion, args[0]); diff != "" {
 					t.Errorf("unexpected protocol version (-want +got):\n%s", diff)
+				}
+				if stdinBytes, err := io.ReadAll(stdin); err != nil {
+					t.Errorf("reading stdin: %v", err)
+				} else if diff := cmp.Diff(testStdinBytes, stdinBytes); diff != "" {
+					t.Errorf("unexpected stdin bytes (-want +got):\n%s", diff)
 				}
 				osArgs := append([]string{name}, args...)
 				if pluginArgs, err := handler.GetPluginArgs(osArgs); err != nil {
 					t.Error(err)
 				} else if diff := cmp.Diff(testPluginArgs, pluginArgs); diff != "" {
-					t.Errorf("unexpected plugin args (-want +got):\n%s", diff)
+					t.Errorf("parsing plugin args (-want +got):\n%s", diff)
 				}
-				return testCommand{
+				return testCmd{
 					output: tc.cmdOutputBytes,
-					err:    tc.commandOutputErr,
+					err:    tc.cmdOutputErr,
 				}
 			}
-			// client with our mocked Command
-			testPluginClient := newPluginClient(testExecutable, testInitOptions, makeCommandFunc)
+			// client with our mocked Cmd
+			testPluginClient := newPluginClient(testExecutable, testInitOptions, makeCmdFunc)
 			// invokePlugin
 			testContext := context.TODO()
 			testStdin := bytes.NewBuffer(testStdinBytes)
@@ -229,21 +229,21 @@ func TestInvokePlugin(t *testing.T) {
 	}
 }
 
-// TestSignerVerifierImpl is a mock implementation that asserts that the
+// testSignerVerifierImpl is a mock implementation that asserts that the
 // expected values are both sent and received through the encoding and decoding processes.
-type TestSignerVerifierImpl struct {
+type testSignerVerifierImpl struct {
 	// TODO: remove this embedding after all methods are implemented.
 	kms.SignerVerifier
 	t *testing.T
 }
 
 // DefaultAlgorithm accepts no arguments, but returns an expected value.
-func (s TestSignerVerifierImpl) DefaultAlgorithm() string {
+func (s testSignerVerifierImpl) DefaultAlgorithm() string {
 	return testDefaultAlgorithm
 }
 
 // CreateKey checks the expected context deadline and algorithm, and returns the expected public key.
-func (s TestSignerVerifierImpl) CreateKey(ctx context.Context, algorithm string) (crypto.PublicKey, error) {
+func (s testSignerVerifierImpl) CreateKey(ctx context.Context, algorithm string) (crypto.PublicKey, error) {
 	if diff := cmp.Diff(testDefaultAlgorithm, algorithm); diff != "" {
 		s.t.Errorf("unexpected algorithm (-want +got):\n%s", diff)
 	}
@@ -257,7 +257,7 @@ func (s TestSignerVerifierImpl) CreateKey(ctx context.Context, algorithm string)
 	return testPublicKey, nil
 }
 
-func (s TestSignerVerifierImpl) SignMessage(message io.Reader, opts ...signature.SignOption) ([]byte, error) {
+func (s testSignerVerifierImpl) SignMessage(message io.Reader, opts ...signature.SignOption) ([]byte, error) {
 	messageBytes, err := io.ReadAll(message)
 	if err != nil {
 		return nil, err
@@ -293,7 +293,7 @@ func (s TestSignerVerifierImpl) SignMessage(message io.Reader, opts ...signature
 	if diff := cmp.Diff(testDigest, digest); diff != "" {
 		s.t.Errorf("unexpected digest (-want +got):\n%s", diff)
 	}
-	if diff := cmp.Diff(testHashFunc, signerOpts.HashFunc()); diff != "" {
+	if diff := cmp.Diff(testHashFunction, signerOpts.HashFunc()); diff != "" {
 		s.t.Errorf("unexpected hash func (-want +got):\n%s", diff)
 	}
 	return testSignature, nil
@@ -306,7 +306,7 @@ func TestPluginClient(t *testing.T) {
 
 	// Mock the behavior of Command to simulates a real plugin program by
 	// calling the helper handler functions `GetPluginArgs()` and `Dispatch()`, passing along the stdin stdout, and args.
-	makeCommandFunc := func(ctx context.Context, stdin io.Reader, stderr io.Writer, name string, args ...string) command {
+	makeCmdFunc := func(ctx context.Context, stdin io.Reader, stderr io.Writer, name string, args ...string) cmd {
 		// Use the helpfer functions in the handler package.
 		osArgs := append([]string{name}, args...)
 		pluginArgs, err := handler.GetPluginArgs(osArgs)
@@ -314,13 +314,13 @@ func TestPluginClient(t *testing.T) {
 			t.Fatal(err)
 		}
 		var stdout bytes.Buffer
-		_, err = handler.Dispatch(&stdout, stdin, pluginArgs, TestSignerVerifierImpl{
+		_, err = handler.Dispatch(&stdout, stdin, pluginArgs, testSignerVerifierImpl{
 			t: t,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return testCommand{
+		return testCmd{
 			output: stdout.Bytes(),
 			err:    err,
 		}
@@ -328,8 +328,9 @@ func TestPluginClient(t *testing.T) {
 	testPluginClient := newPluginClient(
 		testExecutable,
 		&common.InitOptions{},
-		makeCommandFunc,
+		makeCmdFunc,
 	)
+	testContext, _ := context.WithDeadline(context.TODO(), testContextDeadline)
 	var testErr error = nil
 
 	t.Run("DefaultAlgorithm", func(t *testing.T) {
@@ -346,7 +347,18 @@ func TestPluginClient(t *testing.T) {
 
 		testContext, _ := context.WithDeadline(context.TODO(), testContextDeadline)
 		publicKey, err := testPluginClient.CreateKey(testContext, testDefaultAlgorithm)
+		if diff := cmp.Diff(testPublicKey, publicKey); diff != "" {
+			t.Errorf("public key mismatch (-want +got):\n%s", diff)
+		}
+		if diff := cmp.Diff(testErr, err); diff != "" {
+			t.Errorf("eerror mismatch (-want +got):\n%s", diff)
+		}
+	})
 
+	t.Run("CreateKey", func(t *testing.T) {
+		t.Parallel()
+
+		publicKey, err := testPluginClient.CreateKey(testContext, testDefaultAlgorithm)
 		if diff := cmp.Diff(testPublicKey, publicKey); diff != "" {
 			t.Errorf("public key mismatch (-want +got):\n%s", diff)
 		}
@@ -364,7 +376,7 @@ func TestPluginClient(t *testing.T) {
 			options.WithKeyVersion(testKeyVersion),
 			options.WithRemoteVerification(testRemoteVerification),
 			options.WithDigest(testDigest),
-			options.WithCryptoSignerOpts(testHashFunc),
+			options.WithCryptoSignerOpts(testHashFunction),
 		}
 		signature, err := testPluginClient.SignMessage(bytes.NewReader(testMessageBytes), testOpts...)
 
