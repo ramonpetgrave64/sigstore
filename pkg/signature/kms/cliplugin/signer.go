@@ -91,6 +91,7 @@ func (c PluginClient) invokePlugin(ctx context.Context, stdin io.Reader, methodA
 
 // TODO: Additonal methods to be implemented
 
+// DefaultAlgorithm calls and returns the plugin's implementation of DefaultAlgorithm().
 func (c PluginClient) DefaultAlgorithm() string {
 	args := &common.MethodArgs{
 		MethodName:       common.DefaultAlgorithmMethodName,
@@ -103,6 +104,7 @@ func (c PluginClient) DefaultAlgorithm() string {
 	return resp.DefaultAlgorithm.DefaultAlgorithm
 }
 
+// CreateKey calls and returns the plugin's implementation of CreateKey().
 func (c PluginClient) CreateKey(ctx context.Context, algorithm string) (crypto.PublicKey, error) {
 	args := &common.MethodArgs{
 		MethodName: common.CreateKeyMethodName,
@@ -124,6 +126,7 @@ func (c PluginClient) CreateKey(ctx context.Context, algorithm string) (crypto.P
 	return publicKey, nil
 }
 
+// SignMessage calls and returns the plugin's implementation of SignMessage().
 func (c PluginClient) SignMessage(message io.Reader, opts ...signature.SignOption) ([]byte, error) {
 	ctx := context.TODO()
 	args := &common.MethodArgs{

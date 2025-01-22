@@ -257,6 +257,7 @@ func (s testSignerVerifierImpl) CreateKey(ctx context.Context, algorithm string)
 	return testPublicKey, nil
 }
 
+// SignMessage checsk the expected message and opts, and returns the epxtected signature.
 func (s testSignerVerifierImpl) SignMessage(message io.Reader, opts ...signature.SignOption) ([]byte, error) {
 	messageBytes, err := io.ReadAll(message)
 	if err != nil {
