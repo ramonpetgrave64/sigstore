@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"log/slog"
 	"os"
 
 	"github.com/sigstore/sigstore/pkg/cryptoutils"
@@ -134,7 +133,6 @@ func (c PluginClient) SignMessage(message io.Reader, opts ...signature.SignOptio
 		},
 	}
 	resp, err := c.invokePlugin(ctx, message, args)
-	slog.Info("ctx", "ctx", ctx)
 	if err != nil {
 		return nil, err
 	}
