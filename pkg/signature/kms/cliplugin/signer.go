@@ -130,7 +130,7 @@ func (c PluginClient) SignMessage(message io.Reader, opts ...signature.SignOptio
 	args := &common.MethodArgs{
 		MethodName: common.SignMessageMethodName,
 		SignMessage: &common.SignMessageArgs{
-			SignOptions: getSignOptions(&ctx, opts),
+			SignOptions: getSignOptionsAndApplyContext(&ctx, opts),
 		},
 	}
 	resp, err := c.invokePlugin(ctx, message, args)

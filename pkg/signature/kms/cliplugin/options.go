@@ -25,9 +25,9 @@ import (
 	"github.com/sigstore/sigstore/pkg/signature/kms/cliplugin/common"
 )
 
-// getRPCOptions extracts properties of all of opts into struct ready for serializing.
-// ctx will be overwritten if there is a Context within the opts.
-func getRPCOptions(ctx *context.Context, opts []signature.RPCOption) *common.RPCOptions {
+// getRPCOptionsAndApplyContext extracts properties of all of opts into struct ready for serializing.
+// ctx will be overwritten with `signature.RPCOption.ApplyContext()` if there is a Context within the opts.
+func getRPCOptionsAndApplyContext(ctx *context.Context, opts []signature.RPCOption) *common.RPCOptions {
 	var keyVersion string
 	var remoteVerification bool
 	for _, opt := range opts {
@@ -67,7 +67,9 @@ func getMessageOptions(opts []signature.MessageOption) *common.MessageOptions {
 	}
 }
 
-func getSignOptions(ctx *context.Context, opts []signature.SignOption) *common.SignOptions {
+// getMessageOptions extracts properties of all of opts into struct ready for serializing,
+// ctx will be overwritten with `signature.RPCOption.ApplyContext()` if there is a Context within the opts.
+func getSignOptionsAndApplyContext(ctx *context.Context, opts []signature.SignOption) *common.SignOptions {
 	rpcOpts := []signature.RPCOption{}
 	for _, opt := range opts {
 		rpcOpts = append(rpcOpts, opt)
@@ -77,7 +79,7 @@ func getSignOptions(ctx *context.Context, opts []signature.SignOption) *common.S
 		messageOpts = append(messageOpts, opt)
 	}
 	return &common.SignOptions{
-		RPCOptions:     getRPCOptions(ctx, rpcOpts),
+		RPCOptions:     getRPCOptionsAndApplyContext(ctx, rpcOpts),
 		MessageOptions: getMessageOptions(messageOpts),
 	}
 }
