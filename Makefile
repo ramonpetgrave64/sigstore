@@ -24,8 +24,10 @@ INTEGRATION_TEST_DIR := ./test/e2e
 GO-FUZZ-BUILD := $(TOOLS_BIN_DIR)/go-fuzz-build
 
 TEST_LOCALKMS_DIR := ./test/cliplugin/localkms
+TEST_LOCALKMS_DIR2 := ./test/cliplugin/localkms2
 TEST_LOCALKMS_BIN_DIR := $(CURDIR)/bin
 TEST_LOCALKMS_BIN := $(TEST_LOCALKMS_BIN_DIR)/sigstore-kms-testkms
+TEST_LOCALKMS_BIN2 := $(TEST_LOCALKMS_BIN_DIR)/sigstore-kms-testkms
 ifeq ($(OS),Windows_NT)
 	TEST_LOCALKMS_BIN := $(TEST_LOCALKMS_BIN).exe
 endif
@@ -57,6 +59,11 @@ test-signer-program: ## Run Tests for the cliplugin against a pre-compiled plugi
 	set -o xtrace; \
 		go -C $(TEST_LOCALKMS_DIR) build -o $(TEST_LOCALKMS_BIN) && \
 		go -C $(CLI_PLUGIN_DIR) test -tags=signer_program ./ -key-resource-id testkms://$(TEST_LOCALKMS_BIN_DIR)/key.pem
+
+test-alt-signer-program: ## Run Tests for the cliplugin against a pre-compiled plugin program.
+	set -o xtrace; \
+		go -C $(TEST_LOCALKMS_DIR2) build -o $(TEST_LOCALKMS_BIN2) && \
+		go -C $(CLI_PLUGIN_DIR) test -v -tags=alt_signer_program ./ -key-resource-id testkms://$(TEST_LOCALKMS_BIN_DIR)/key.pem
 
 tidy: ## Run go mod tidy all Go modules.
 	set -o xtrace; \

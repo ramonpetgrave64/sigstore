@@ -19,10 +19,12 @@
 package handler
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 
 	"github.com/sigstore/sigstore/pkg/signature/kms/cliplugin/common"
 	"github.com/sigstore/sigstore/pkg/signature/kms/cliplugin/internal/signerverifier"
@@ -54,7 +56,7 @@ func WriteResponse(stdout io.Writer, resp *common.PluginResp) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprint(stdout, string(enc))
+	fmt.Fprintln(stdout, string(enc))
 	return nil
 }
 
@@ -92,4 +94,47 @@ func Dispatch(stdout io.Writer, stdin io.Reader, pluginArgs *common.PluginArgs, 
 	}
 	err = WriteResponse(stdout, &resp)
 	return &resp, err
+}
+
+func LoopDispatch(stdout io.Writer, stdin io.Reader, impl signerverifier.SignerVerifier) error {
+	slog.Info("LoopDispatch")
+	// reader := bufio.NewReader(stdin)
+	// for {
+	// 	slog.Info("LoopDispatch", "for", true)
+	// 	line, err := reader.ReadBytes('\n')
+	// 	slog.Info("LoopDispatch", "line", line)
+	// 	if err != nil && err != io.EOF {
+	// 		slog.Error("LoopDispatch", "readErr", err)
+	// 		return err
+	// 	}
+	// 	var pluginArgs common.PluginArgs
+	// 	if err := json.Unmarshal(line, &pluginArgs); err != nil {
+	// 		slog.Error("LoopDispatch", "unmarshalErr", err)
+	// 		return err
+	// 	}
+	// 	slog.Info("LoopDispatch", "args", pluginArgs)
+	// 	pluginResp, err := Dispatch(stdout, stdin, &pluginArgs, impl)
+	// 	if err != nil {
+	// 		slog.Error("LoopDispatch", "dispatchErr", err)
+	// 		return err
+	// 	}
+	// 	slog.Info("LoopDispatch", "pluginResp", pluginResp)
+	// }
+	scanner := bufio.NewScanner(stdin)
+	slog.Info("LoopDispatch", "scanner", scanner)
+	for scanner.Scan() {
+		slog.Info("LoopDispatch", "scanner.Scan", true)
+		line := scanner.Bytes()
+		slog.Info("LoopDispatch", "line", string(line))
+		var pluginArgs common.PluginArgs
+		if err := json.Unmarshal(line, &pluginArgs); err != nil {
+			return err
+		}
+		slog.Info("LoopDispatch", "args", pluginArgs)
+		if _, err := Dispatch(stdout, stdin, &pluginArgs, impl); err != nil {
+			slog.Error("LoopDispatch", "dispatchErr", err)
+			return err
+		}
+	}
+	return nil
 }
